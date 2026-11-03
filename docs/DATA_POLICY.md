@@ -85,4 +85,4 @@ dgspamguard allowlist add apps.internal-cloud.net --kind shared_hosting --notes 
 dgspamguard sync --force
 ```
 
-For false-positive reports on `https://dgspamguard.daviante.org` or [`daviante-org/dgspamguard-data`](https://github.com/daviante-org/dgspamguard-data), contact `code@daviante.org`.
+For false-positive reports on `https://dgspamguard.daviante.org` or [`daviante-org/dgspamguard-data`](https://github.com/daviante-org/dgspamguard-data), contact `code@daviante.org`. For itemized upstream data ownership, license terms, and third-party copyright attributions across all 30 feeds, see [`CREDITS.md`](../CREDITS.md) and [`NOTICE`](../NOTICE).

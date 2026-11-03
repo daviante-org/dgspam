@@ -1,0 +1,148 @@
+DGSPAMGUARD — Self-Hosted Threat, Protective DNS RPZ & Mail Intelligence Engine
+Copyright 2026 Daviante (https://daviante.org)
+
+This product includes compilation software, schemas, and documentation developed
+by Daviante (https://daviante.org) and licensed under the Apache License,
+Version 2.0 (see LICENSE).
+
+================================================================================
+1. NO CLAIM OF OWNERSHIP OVER THIRD-PARTY THREAT, DOMAIN, OR TAXONOMY DATA
+================================================================================
+
+Daviante does NOT claim copyright, sui generis database ownership, or
+proprietary title over any upstream domain suffix lists, popularity rankings,
+CSIRT phishing/malware feeds, SMTP abuse blocklists, email provider taxonomies,
+or malware file-hash repositories fetched at runtime by DGSPAMGUARD or compiled
+into `dgspamguard-data` snapshots. Daviante's Apache-2.0 license applies solely
+to Daviante's own source code, normalization/corroboration pipeline, and
+packaging, and does NOT grant, transfer, or sublicense any proprietary rights
+belonging to upstream data providers.
+
+================================================================================
+2. THIRD-PARTY UPSTREAM DATA & RULE ATTRIBUTIONS
+================================================================================
+
+- Mozilla Public Suffix List (https://publicsuffix.org/)
+  Copyright Mozilla Foundation and contributors. Available under the Mozilla
+  Public License, Version 2.0 (MPL-2.0: https://mozilla.org/MPL/2.0/).
+
+- Tranco Research Top Sites Ranking (https://tranco-list.eu/)
+  Created by Victor Le Pochat, Tom Van Goethem, Samaneh Tajalizadehkhoob,
+  Maciej Korczynski, and Wouter Joosen (NDSS 2019, doi:10.14722/ndss.2019.23386).
+  Used strictly internally during compilation as a false-positive subtraction
+  gate; Tranco ranking lists are NOT redistributed in published artifacts.
+
+- abuse.ch Threat Intelligence Feeds — URLhaus, ThreatFox, MalwareBazaar, and
+  Feodo Tracker (https://abuse.ch/)
+  Maintained by the Institute for Cybersecurity and Engineering (ICE) at Bern
+  University of Applied Sciences. Dedicated to the public domain under Creative
+  Commons Zero (CC0 1.0 Universal:
+  https://creativecommons.org/publicdomain/zero/1.0/).
+
+- The Spamhaus Project — DROP ("Don't Route Or Peer") IPv4 & IPv6
+  (https://www.spamhaus.org/drop/ — `drop_v4.json`, `drop_v6.json`)
+  Copyright (c) The Spamhaus Project. Provided free of charge for network and
+  mail defense; all underlying copyright and database rights remain the property
+  of The Spamhaus Project.
+
+- CERT Polska / NASK Warning List (https://hole.cert.pl/)
+  Maintained by CERT Polska (NASK — National Research Institute, Poland) as a
+  public cybersecurity warning feed against active phishing and fraud domains.
+
+- OpenPhish Community Feed (https://openphish.com/feed.txt)
+  Copyright OpenPhish. Public community phishing URL intelligence feed;
+  commercial redistribution or managed-service resale remains subject to
+  OpenPhish terms of use (https://openphish.com/terms.html).
+
+- Phishunt (https://phishunt.io/feed.txt)
+  Maintained by Phishunt as a public active phishing URL feed, subject to
+  Phishunt terms of service.
+
+- Phishing Army Blocklist (https://phishing.army/)
+  Created and maintained by Andrea Draghetti (source generator GPLv3; public
+  blocklist feed freely accessible on an "AS IS" basis without transferring
+  upstream provider rights — https://phishing.army/).
+
+- malware-filter (`phishing-filter` & `urlhaus-filter`)
+  (https://gitlab.com/malware-filter)
+  Copyright (c) curben and malware-filter contributors. Licensed under the MIT
+  License / CC0-1.0.
+
+- Phishing.Database (https://github.com/Phishing-Database/Phishing.Database)
+  Copyright (c) Mitchell Krog, Nissar Chababy (@funilrys), Funceble, and
+  contributors. Licensed under the MIT License.
+
+- IPsum Threat Intelligence Feed (https://github.com/stamparm/ipsum)
+  Created by Miroslav Stampar (@stamparm). Dedicated to the public domain under
+  The Unlicense (https://unlicense.org/).
+
+- Blocklist.de Fail2Ban Reporting Service (https://www.blocklist.de/)
+  Maintained by Martin Schurig and community contributors (`lists/mail.txt` and
+  `lists/bots.txt`).
+
+- Disposable Email Domains (`disposable-email-domains` & `domains_mx.txt`)
+  (https://github.com/disposable-email-domains/disposable-email-domains &
+  https://github.com/disposable/disposable-email-domains)
+  Dedicated to the public domain under CC0 1.0 Universal / open-source terms by
+  their respective maintainers and contributors.
+
+- MailChecker (https://github.com/FGRibreau/mailchecker)
+  Copyright (c) Francois-Guillaume Ribreau (@FGRibreau) and contributors.
+  Licensed under the MIT License.
+
+- Burner Email Providers (https://github.com/wesbos/burner-email-providers)
+  Copyright (c) Wes Bos (@wesbos) and contributors. Licensed under the MIT
+  License.
+
+- Freemail Database (https://github.com/willwhite/freemail)
+  Copyright (c) Will White (@willwhite) and contributors. Licensed under the MIT
+  License.
+
+- Malicious-Hash (https://github.com/romainmarcoux/malicious-hash)
+  Copyright (c) Romain Marcoux (@romainmarcoux). Licensed under the MIT License.
+
+- Botvrij.eu OSINT IOC Feed (https://www.botvrij.eu/)
+  Maintained by Botvrij.eu / CIRCL OSINT community as an open indicator feed.
+
+- Baseline Spam-Filter AST Grammar (`assets/dgmail-base-seed.json`)
+  Adapted from `stalwartlabs/spam-filter` (https://github.com/stalwartlabs/spam-filter),
+  Copyright (c) Stalwart Labs LLC, dually licensed under the Apache License,
+  Version 2.0 or the MIT License (used here under Apache-2.0 / MIT, with all
+  third-party runtime HTTP/DNSBL lookups removed by Daviante).
+
+================================================================================
+3. MIT LICENSE PERMISSION NOTICE (FOR MIT-LICENSED UPSTREAM REPOSITORIES)
+================================================================================
+
+For components and indicator lists above licensed under the MIT License
+(`Phishing.Database`, `malware-filter`, `mailchecker`, `burner-email-providers`,
+`freemail`, `malicious-hash`, and `stalwartlabs/spam-filter`):
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+================================================================================
+4. TRADEMARK & NON-AFFILIATION DISCLAIMER
+================================================================================
+
+All third-party organization names, project names, and marks belong to their
+respective owners. Reference to these sources in DGSPAMGUARD is strictly
+nominative attribution of upstream data provenance and does not imply
+affiliation, sponsorship, partnership, or endorsement by any third party.
+
+Full itemized provenance, terms links, and rights-holder contact details are
+documented in CREDITS.md (Contact: code@daviante.org).

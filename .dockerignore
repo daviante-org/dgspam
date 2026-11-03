@@ -11,4 +11,7 @@ tests
 *.tar
 *.tgz
 README.md
+LICENSE
+NOTICE
+CREDITS.md
 compose.yaml

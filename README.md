@@ -115,6 +115,7 @@ dgspamguard healthcheck                                        # Local container
 | **[`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md)** | Docker, Podman, Reverse Proxy TLS, Kubernetes OCI Helm chart, Red Hat OpenShift `restricted-v2`, and air-gapped bootstrap. |
 | **[`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md)** | Building from source, running Clippy and integration tests, offline bundle export, and OpenAPI contract verification. |
 | **[`docs/SECURITY.md`](./docs/SECURITY.md)** | Vulnerability reporting (`code@daviante.org`), read-only HTTP threat model, SSRF/tarbomb defenses, and SLSA provenance. |
+| **[`CREDITS.md`](./CREDITS.md)** · **[`NOTICE`](./NOTICE)** | Complete third-party data ownership, copyright, academic citations, MIT/MPL/CC0 notices, and trademark disclaimers across all 30 feeds and baseline rule assets. |
 | **[`openapi.yaml`](./openapi.yaml)** | Canonical OpenAPI 3.1 HTTP specification (verified against Axum routes in CI). |
 | **[`charts/dgspamguard/`](./charts/dgspamguard/Chart.yaml)** · **[`deploy/`](./deploy/kubernetes/dgspamguard.yaml)** | Official Helm v3 chart and standalone Kubernetes / Red Hat OpenShift manifests. |
 
@@ -133,8 +134,8 @@ dgspamguard healthcheck                                        # Local container
 
 ---
 
-## License
+## License & Upstream Data Attribution
 
-Licensed under the [Apache License, Version 2.0](./LICENSE). Compiled datasets in [`daviante-org/dgspamguard-data`](https://github.com/daviante-org/dgspamguard-data) are published under Apache-2.0 / upstream open-data attributions documented in [`docs/DATA_POLICY.md`](./docs/DATA_POLICY.md).
+Software, schemas, and documentation in this repository are licensed under the [Apache License, Version 2.0](./LICENSE) (see [`NOTICE`](./NOTICE)). Daviante claims no ownership over third-party CSIRT, OSINT, domain-boundary, or email-taxonomy data and does not transfer or sublicense rights belonging to upstream providers; all upstream owners, licenses, and citations are credited in [`CREDITS.md`](./CREDITS.md) and [`docs/DATA_POLICY.md`](./docs/DATA_POLICY.md).
 
 Maintained by **Daviante** (`https://daviante.org`) — Contact: `code@daviante.org`.
