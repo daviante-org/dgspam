@@ -1,0 +1,9 @@
+DGSPAMGUARD Threat & Mail Intelligence ({{ .Chart.AppVersion }}) has been deployed.
+
+1. Port-forward locally to inspect the Registry Ledger & Swagger UI:
+   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "dgspamguard.fullname" . }} 8091:{{ .Values.service.port }}
+   Open http://127.0.0.1:8091 and http://127.0.0.1:8091/docs
+
+2. Check readiness & active snapshot:
+   curl -sS http://127.0.0.1:8091/healthz/ready
+   curl -sS http://127.0.0.1:8091/v1/snapshots/latest

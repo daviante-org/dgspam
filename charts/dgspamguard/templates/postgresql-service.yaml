@@ -1,0 +1,18 @@
+{{- if .Values.database.internal.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dgspamguard.postgresql.fullname" . }}
+  labels:
+    {{- include "dgspamguard.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: postgresql
+      protocol: TCP
+  selector:
+    {{- include "dgspamguard.postgresql.selectorLabels" . | nindent 4 }}
+{{- end }}

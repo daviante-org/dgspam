@@ -1,0 +1,51 @@
+# ==============================================================================
+# DGSPAMGUARD Local / Self-Hosted Compose Stack (Docker & Podman Compatible)
+# ==============================================================================
+name: dgspamguard
+
+services:
+  postgres:
+    image: docker.io/library/postgres:18.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dgspamguard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dgspamguard-local-dev}
+      POSTGRES_DB: dgspamguard
+    volumes:
+      - dgspamguard-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dgspamguard -d dgspamguard"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  dgspamguard:
+    image: ghcr.io/daviante-org/dgspamguard:1.0.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8091:8091"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      DGSPAMGUARD_DATABASE_URL: postgresql://dgspamguard:${POSTGRES_PASSWORD:-dgspamguard-local-dev}@postgres:5432/dgspamguard?sslmode=disable
+      DGSPAMGUARD_HOST: 0.0.0.0
+      DGSPAMGUARD_PORT: "8091"
+      DGSPAMGUARD_SWAGGER_ENABLED: "true"
+      DGSPAMGUARD_SYNC_INTERVAL_SECONDS: "60"
+      DGSPAMGUARD_SNAPSHOT_INTERVAL_SECONDS: "14400"
+      DGSPAMGUARD_RETENTION_DAYS: "7"
+      DGSPAMGUARD_ABUSECH_AUTH_KEY: ${DGSPAMGUARD_ABUSECH_AUTH_KEY:-}
+
+volumes:
+  dgspamguard-pgdata:

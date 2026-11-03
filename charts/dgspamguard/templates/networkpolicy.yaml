@@ -1,0 +1,20 @@
+{{- if .Values.networkPolicy.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "dgspamguard.fullname" . }}
+  labels:
+    {{- include "dgspamguard.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "dgspamguard.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  {{- if .Values.networkPolicy.allowAllIngress }}
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8091
+  {{- end }}
+{{- end }}

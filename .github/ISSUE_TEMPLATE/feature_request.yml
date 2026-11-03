@@ -1,0 +1,12 @@
+name: Feature or Feed Proposal
+description: Propose a new open-data threat feed or engine capability
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal & Motivation
+      description: Describe the capability or open-license feed (must allow redistribution without API lock-in).
+    validations:
+      required: true

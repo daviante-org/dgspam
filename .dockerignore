@@ -1,0 +1,14 @@
+.git
+.github
+target
+dist
+dist-helm
+charts
+deploy
+docs
+tests
+.env
+*.tar
+*.tgz
+README.md
+compose.yaml

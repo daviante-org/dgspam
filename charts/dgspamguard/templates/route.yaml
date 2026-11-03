@@ -1,0 +1,31 @@
+{{- if .Values.openshift.route.enabled -}}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "dgspamguard.fullname" . }}
+  labels:
+    {{- include "dgspamguard.labels" . | nindent 4 }}
+  {{- with .Values.openshift.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.openshift.route.host }}
+  host: {{ .Values.openshift.route.host | quote }}
+  {{- end }}
+  {{- if .Values.openshift.route.path }}
+  path: {{ .Values.openshift.route.path | quote }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "dgspamguard.fullname" . }}
+    weight: 100
+  port:
+    targetPort: http
+  {{- if .Values.openshift.route.tls.enabled }}
+  tls:
+    termination: {{ .Values.openshift.route.tls.termination }}
+    insecureEdgeTerminationPolicy: {{ .Values.openshift.route.tls.insecureEdgeTerminationPolicy }}
+  {{- end }}
+  wildcardPolicy: None
+{{- end }}

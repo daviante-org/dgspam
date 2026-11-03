@@ -1,0 +1,25 @@
+name: Bug or False-Positive Report
+description: Report a defect, feed parsing issue, or domain/URL false positive
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Clear description of the issue or false positive.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: DGSPAMGUARD & Snapshot Version
+      placeholder: "dgspamguard 1.0.0 / snapshot v20261103.1600"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction Steps or Sample Response
+    validations:
+      required: true

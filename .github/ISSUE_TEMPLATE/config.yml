@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability Disclosure
+    url: https://github.com/daviante-org/dgspamguard/security/advisories/new
+    about: Privately report security vulnerabilities to Daviante Engineering.
+  - name: False Positive / Allowlist Request
+    url: https://github.com/daviante-org/dgspamguard/issues/new?template=bug_report.yml
+    about: Report a false-positive domain or URL classification.

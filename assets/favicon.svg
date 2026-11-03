@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="fav-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F43F5E" />
+      <stop offset="55%" stop-color="#E11D48" />
+      <stop offset="100%" stop-color="#9F1239" />
+    </linearGradient>
+    <linearGradient id="fav-filter-l" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#FFE4E6" />
+    </linearGradient>
+    <linearGradient id="fav-filter-r" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FECDD3" />
+      <stop offset="100%" stop-color="#FDA4AF" />
+    </linearGradient>
+  </defs>
+
+  <!-- Full-Bleed App Squircle -->
+  <rect width="64" height="64" rx="16" fill="url(#fav-bg)" />
+
+  <!-- Subtle Threat Radar Sweep Ring -->
+  <circle cx="32" cy="29" r="22.5" fill="none" stroke="#FDA4AF" stroke-opacity="0.35" stroke-width="1.8" stroke-dasharray="6 3" />
+
+  <!-- High-Contrast 3D Split-Facet Threat Filter / Sieve -->
+  <g>
+    <!-- Left Illuminated Funnel & Stem Half -->
+    <path d="M 11,14 L 32,14 L 32,54 L 26.8,50.2 L 26.8,34 L 11,17.8 Z" fill="url(#fav-filter-l)" />
+    <!-- Right Shaded Funnel & Stem Half -->
+    <path d="M 53,14 L 32,14 L 32,54 L 37.2,50.2 L 37.2,34 L 53,17.8 Z" fill="url(#fav-filter-r)" />
+
+    <!-- Inner Crimson Analysis Chamber -->
+    <path d="M 18.5,18.5 L 45.5,18.5 L 35,29.5 L 29,29.5 Z" fill="#881337" />
+
+    <!-- Horizontal Laser Scan Line -->
+    <line x1="9" y1="23.5" x2="55" y2="23.5" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-opacity="0.92" />
+
+    <!-- Isolated / Flagged Threat Node -->
+    <circle cx="32" cy="23.5" r="3.4" fill="#FFFFFF" />
+
+    <!-- Verified Clean Output Dot at Stem Bottom -->
+    <circle cx="32" cy="45.5" r="2" fill="#881337" />
+  </g>
+</svg>

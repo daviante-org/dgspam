@@ -1,0 +1,811 @@
+openapi: 3.1.0
+info:
+  title: DGSPAMGUARD Threat & Mail Intelligence API
+  version: 1.0.0
+  summary: 5-layer domain, URL, SMTP IP/CIDR, email taxonomy, malware attachment hash, Protective DNS RPZ, and mail rule intelligence API by Daviante.
+  description: |
+    **DGSPAMGUARD** compiles global open-source CSIRT phishing feeds, malware distribution hosts, disposable and free email provider directories, URL shortener registries, TLD abuse reputation, and attachment SHA-256 IOCs into low-latency REST endpoints and signed rolling dataset snapshots (`dgspamguard-data`).
+
+    ### Core Capabilities
+    - **Domain & Email Reputation (`GET /v1/domain/{domain}`)**: Punycode/IDNA normalization, Mozilla Public Suffix List (`eTLD+1`) inheritance, multi-source threat confidence, disposable/free/redirector/trusted taxonomy, and TLD risk scoring.
+    - **Full URL Inspection (`POST /v1/url/check`)**: Canonical URL SHA-256 matching across path-based multi-tenant hosts (`docs.google.com`, `forms.gle`, `dropbox.com`) plus domain, parent-domain, and IP-host fallback.
+    - **SMTP & Network IP Reputation (`GET /v1/ip/{ip}`)**: Longest-prefix CIDR matching across hijacked netblocks (Spamhaus DROP v4/v6), active botnet C2 IPs (Feodo Tracker, Blocklist.de), SMTP attackers, and corroborated IP blocklists (IPsum Level 3+).
+    - **Attachment Hash Lookup (`GET /v1/hash/{sha256}`)**: Malware payload SHA-256 verification.
+    - **Mixed Batch Evaluation (`POST /v1/check/batch`)**: Classify and evaluate up to 250 mixed domains, URLs, IPv4/IPv6 addresses, email addresses, and SHA-256 digests in one request.
+    - **Rolling Datasets (`/v1/snapshots/*`)**: Download DNS Response Policy Zones (`dgspamguard-threat-domains.rpz.gz`), SMTP IP/CIDR blocklists (`dgspamguard-smtp-ips.csv.gz`), DGMail rulesets (`dgmail-rules.json.gz`), CSV/TXT threat feeds, and `bundle.tar.gz` archives.
+  contact:
+    name: Daviante Engineering
+    url: https://daviante.org
+    email: code@daviante.org
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+servers:
+  - url: /
+    description: Current DGSPAMGUARD instance
+  - url: https://dgspamguard.daviante.org
+    description: Daviante public reference deployment
+
+tags:
+  - name: Health
+    description: Container liveness and dataset readiness probes
+  - name: Intelligence
+    description: Domain, URL, SMTP IP/CIDR, email, and SHA-256 threat & taxonomy lookups
+  - name: Snapshots
+    description: Rolling dataset metadata, RPZ zones, DGMail rules, and archive downloads
+
+paths:
+  /healthz/live:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      operationId: getHealthLive
+      responses:
+        "200":
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthLiveResponse"
+
+  /healthz/ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe
+      operationId: getHealthReady
+      responses:
+        "200":
+          description: Active A/B dataset slot is initialized and serving queries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthReadyResponse"
+        "503":
+          description: Dataset bootstrap is still in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthReadyResponse"
+
+  /v1/domain/{domain}:
+    get:
+      tags: [Intelligence]
+      summary: Inspect domain threat status, email taxonomy, and TLD risk
+      operationId: lookupDomain
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          description: Domain name (ASCII FQDN or Unicode IDN, e.g. `paypal.com` or `mailinator.com`)
+          schema:
+            type: string
+            example: mailinator.com
+      responses:
+        "200":
+          description: Domain intelligence evaluation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DomainLookupResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/url/check:
+    post:
+      tags: [Intelligence]
+      summary: Inspect a full HTTP/HTTPS URL against exact URL and domain threat tables
+      operationId: checkUrl
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UrlCheckRequest"
+      responses:
+        "200":
+          description: Canonical URL & host threat evaluation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UrlCheckResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/ip/{ip}:
+    get:
+      tags: [Intelligence]
+      summary: Check an IPv4 or IPv6 address against malicious SMTP sending IPs, botnet C2 hosts, and hijacked CIDR netblocks
+      operationId: lookupIp
+      parameters:
+        - name: ip
+          in: path
+          required: true
+          description: IPv4 or IPv6 literal address (e.g. `1.1.1.1` or `2606:4700:4700::1111`)
+          schema:
+            type: string
+            example: 1.1.1.1
+      responses:
+        "200":
+          description: IP & longest-prefix CIDR threat evaluation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpLookupResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/hash/{sha256}:
+    get:
+      tags: [Intelligence]
+      summary: Check an attachment or file SHA-256 digest against known malware IOCs
+      operationId: lookupHash
+      parameters:
+        - name: sha256
+          in: path
+          required: true
+          description: 64-character hexadecimal SHA-256 digest
+          schema:
+            type: string
+            pattern: "^[0-9a-fA-F]{64}$"
+      responses:
+        "200":
+          description: SHA-256 malware evaluation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HashLookupResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/check/batch:
+    post:
+      tags: [Intelligence]
+      summary: Batch-evaluate up to 250 mixed domains, URLs, emails, or SHA-256 hashes
+      operationId: checkBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchCheckRequest"
+      responses:
+        "200":
+          description: Ordered per-item evaluation results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchCheckResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/snapshots:
+    get:
+      tags: [Snapshots]
+      summary: List available rolling dataset snapshots
+      operationId: listSnapshots
+      responses:
+        "200":
+          description: Rolling snapshots within retention window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SnapshotListResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /v1/snapshots/latest:
+    get:
+      tags: [Snapshots]
+      summary: Get metadata and artifact manifest for the active snapshot
+      operationId: getLatestSnapshot
+      responses:
+        "200":
+          description: Active snapshot details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SnapshotDetailResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/snapshots/{version}:
+    get:
+      tags: [Snapshots]
+      summary: Get metadata and artifact manifest for a specific snapshot version
+      operationId: getSnapshotByVersion
+      parameters:
+        - name: version
+          in: path
+          required: true
+          description: Snapshot version tag (e.g. `v20261103.1600` or `latest`)
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Snapshot details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SnapshotDetailResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /v1/snapshots/{version}/bundle.tar.gz:
+    get:
+      tags: [Snapshots]
+      summary: Download full snapshot bundle archive (`bundle.tar.gz`)
+      operationId: downloadSnapshotBundle
+      parameters:
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: GZIP-compressed TAR archive containing manifest, checksums, and all 9 datasets
+          content:
+            application/gzip:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/snapshots/{version}/files/{filename}:
+    get:
+      tags: [Snapshots]
+      summary: Download an individual dataset file (`dgspamguard-threat-domains.rpz.gz`, `dgspamguard-smtp-ips.csv.gz`, `dgmail-rules.json.gz`, `SHA256SUMS.txt`, etc.)
+      operationId: downloadSnapshotFile
+      parameters:
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - dgspamguard-threat-domains.rpz.gz
+              - dgspamguard-threat-domains.csv.gz
+              - dgspamguard-threat-domains.txt.gz
+              - dgspamguard-threat-urls.csv.gz
+              - dgspamguard-smtp-ips.csv.gz
+              - dgspamguard-email-domains.csv.gz
+              - dgspamguard-malware-hashes.csv.gz
+              - dgspamguard-tld-risk.csv.gz
+              - dgmail-rules.json.gz
+              - SHA256SUMS.txt
+              - manifest.json
+      responses:
+        "200":
+          description: Dataset artifact stream with `ETag` and `X-Checksum-Sha256` headers
+          content:
+            application/gzip:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                type: object
+            text/plain:
+              schema:
+                type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  responses:
+    BadRequest:
+      description: Invalid input parameter or request body
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+    NotFound:
+      description: Requested snapshot or file was not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+    PayloadTooLarge:
+      description: Request body exceeded size limit
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+    TooManyRequests:
+      description: Sliding-window rate limit exceeded
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+    ServiceUnavailable:
+      description: Service dataset is still initializing
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+
+  schemas:
+    ProblemDetails:
+      type: object
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+          example: about:blank
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: [string, "null"]
+
+    HealthLiveResponse:
+      type: object
+      required: [status, service, version]
+      properties:
+        status:
+          type: string
+          example: ok
+        service:
+          type: string
+          example: dgspamguard
+        version:
+          type: string
+          example: 1.0.0
+
+    HealthReadyResponse:
+      type: object
+      required: [status, initial_bootstrapped]
+      properties:
+        status:
+          type: string
+          enum: [ready, initializing]
+        active_slot:
+          type: [string, "null"]
+        active_version:
+          type: [string, "null"]
+        initial_bootstrapped:
+          type: boolean
+
+    TldReputation:
+      type: object
+      required: [tld, risk_score, risk_level]
+      properties:
+        tld:
+          type: string
+        risk_score:
+          type: integer
+        risk_level:
+          type: string
+          enum: [low, elevated, high, critical]
+
+    DomainThreatInfo:
+      type: object
+      required: [is_threat, confidence, source_count, sources]
+      properties:
+        is_threat:
+          type: boolean
+        category:
+          type: [string, "null"]
+        matched_domain:
+          type: [string, "null"]
+        confidence:
+          type: integer
+        source_count:
+          type: integer
+        sources:
+          type: array
+          items:
+            type: string
+
+    DomainTaxonomyInfo:
+      type: object
+      required:
+        - is_disposable_email
+        - is_free_email
+        - is_url_redirector
+        - is_trusted
+        - is_shared_hosting
+      properties:
+        is_disposable_email:
+          type: boolean
+        is_free_email:
+          type: boolean
+        is_url_redirector:
+          type: boolean
+        is_trusted:
+          type: boolean
+        is_shared_hosting:
+          type: boolean
+
+    DomainLookupResponse:
+      type: object
+      required:
+        - domain
+        - unicode_domain
+        - registered_domain
+        - verdict
+        - risk_score
+        - threat
+        - taxonomy
+        - tld
+        - snapshot_version
+      properties:
+        domain:
+          type: string
+        unicode_domain:
+          type: string
+        registered_domain:
+          type: string
+        verdict:
+          type: string
+          enum: [clean, elevated, suspicious, malicious]
+        risk_score:
+          type: integer
+        threat:
+          $ref: "#/components/schemas/DomainThreatInfo"
+        taxonomy:
+          $ref: "#/components/schemas/DomainTaxonomyInfo"
+        tld:
+          $ref: "#/components/schemas/TldReputation"
+        snapshot_version:
+          type: string
+        live_updated_at:
+          type: [string, "null"]
+          format: date-time
+
+    UrlCheckRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          example: https://mailinator.com/v4/public/inboxes.jsp
+
+    UrlCheckResponse:
+      type: object
+      required:
+        - input_url
+        - canonical_url
+        - url_sha256
+        - domain
+        - registered_domain
+        - verdict
+        - risk_score
+        - is_threat
+        - confidence
+        - sources
+        - taxonomy
+        - tld
+        - snapshot_version
+      properties:
+        input_url:
+          type: string
+        canonical_url:
+          type: string
+        url_sha256:
+          type: string
+        domain:
+          type: string
+        registered_domain:
+          type: string
+        verdict:
+          type: string
+        risk_score:
+          type: integer
+        is_threat:
+          type: boolean
+        match_scope:
+          type: [string, "null"]
+        category:
+          type: [string, "null"]
+        confidence:
+          type: integer
+        sources:
+          type: array
+          items:
+            type: string
+        taxonomy:
+          $ref: "#/components/schemas/DomainTaxonomyInfo"
+        tld:
+          $ref: "#/components/schemas/TldReputation"
+        snapshot_version:
+          type: string
+        live_updated_at:
+          type: [string, "null"]
+          format: date-time
+
+    IpLookupResponse:
+      type: object
+      required:
+        - ip
+        - ip_version
+        - is_public_routable
+        - verdict
+        - risk_score
+        - is_threat
+        - confidence
+        - source_count
+        - sources
+        - snapshot_version
+      properties:
+        ip:
+          type: string
+        ip_version:
+          type: integer
+          enum: [4, 6]
+        is_public_routable:
+          type: boolean
+        verdict:
+          type: string
+          enum: [clean, suspicious, malicious]
+        risk_score:
+          type: integer
+        is_threat:
+          type: boolean
+        matched_network:
+          type: [string, "null"]
+        match_scope:
+          type: [string, "null"]
+        category:
+          type: [string, "null"]
+        confidence:
+          type: integer
+        source_count:
+          type: integer
+        sources:
+          type: array
+          items:
+            type: string
+        snapshot_version:
+          type: string
+        live_updated_at:
+          type: [string, "null"]
+          format: date-time
+
+    HashLookupResponse:
+      type: object
+      required: [sha256, found, verdict, confidence, sources, snapshot_version]
+      properties:
+        sha256:
+          type: string
+        found:
+          type: boolean
+        verdict:
+          type: string
+          enum: [clean, malicious]
+        malware_family:
+          type: [string, "null"]
+        confidence:
+          type: integer
+        sources:
+          type: array
+          items:
+            type: string
+        snapshot_version:
+          type: string
+        live_updated_at:
+          type: [string, "null"]
+          format: date-time
+
+    BatchCheckRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 250
+          items:
+            type: string
+          example:
+            - daviante.org
+            - 1.1.1.1
+            - user@mailinator.com
+            - https://tinyurl.com/example
+
+    BatchCheckItemResult:
+      type: object
+      required: [input, kind, valid]
+      properties:
+        input:
+          type: string
+        kind:
+          type: string
+          enum: [domain, url, email, ip, sha256, unknown]
+        valid:
+          type: boolean
+        error:
+          type: string
+        verdict:
+          type: string
+        risk_score:
+          type: integer
+        domain_result:
+          $ref: "#/components/schemas/DomainLookupResponse"
+        url_result:
+          $ref: "#/components/schemas/UrlCheckResponse"
+        ip_result:
+          $ref: "#/components/schemas/IpLookupResponse"
+        hash_result:
+          $ref: "#/components/schemas/HashLookupResponse"
+
+    BatchCheckResponse:
+      type: object
+      required: [count, snapshot_version, results]
+      properties:
+        count:
+          type: integer
+        snapshot_version:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/BatchCheckItemResult"
+
+    SnapshotFileItem:
+      type: object
+      required: [filename, content_type, size_bytes, sha256, download_path]
+      properties:
+        filename:
+          type: string
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+        sha256:
+          type: string
+        record_count:
+          type: [integer, "null"]
+        download_path:
+          type: string
+
+    SnapshotDetailResponse:
+      type: object
+      required:
+        - version
+        - release_title
+        - created_at
+        - is_active
+        - threat_domains
+        - threat_urls
+        - threat_ips
+        - disposable_domains
+        - free_domains
+        - redirector_domains
+        - malware_hashes
+        - bundle_sha256
+        - bundle_size_bytes
+        - bundle_download_path
+        - sha256sums_download_path
+        - release_notes_md
+        - files
+      properties:
+        version:
+          type: string
+        release_title:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        is_active:
+          type: boolean
+        threat_domains:
+          type: integer
+        threat_urls:
+          type: integer
+        threat_ips:
+          type: integer
+        disposable_domains:
+          type: integer
+        free_domains:
+          type: integer
+        redirector_domains:
+          type: integer
+        malware_hashes:
+          type: integer
+        bundle_sha256:
+          type: string
+        bundle_size_bytes:
+          type: integer
+        bundle_download_path:
+          type: string
+        sha256sums_download_path:
+          type: string
+        release_notes_md:
+          type: string
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/SnapshotFileItem"
+
+    SnapshotSummaryItem:
+      type: object
+      required:
+        - version
+        - release_title
+        - created_at
+        - is_active
+        - threat_domains
+        - threat_urls
+        - threat_ips
+        - disposable_domains
+        - malware_hashes
+        - bundle_sha256
+        - bundle_size_bytes
+        - detail_path
+      properties:
+        version:
+          type: string
+        release_title:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        is_active:
+          type: boolean
+        threat_domains:
+          type: integer
+        threat_urls:
+          type: integer
+        threat_ips:
+          type: integer
+        disposable_domains:
+          type: integer
+        malware_hashes:
+          type: integer
+        bundle_sha256:
+          type: string
+        bundle_size_bytes:
+          type: integer
+        detail_path:
+          type: string
+
+    SnapshotListResponse:
+      type: object
+      required: [count, snapshots]
+      properties:
+        count:
+          type: integer
+        active_version:
+          type: [string, "null"]
+        snapshots:
+          type: array
+          items:
+            $ref: "#/components/schemas/SnapshotSummaryItem"

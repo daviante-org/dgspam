@@ -1,0 +1,118 @@
+# ==============================================================================
+# DGSPAMGUARD Continuous Integration Workflow
+# ==============================================================================
+name: ci
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  container-and-tests:
+    name: Build Container, Test & Security Scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Cargo registry & build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run Clippy strict lint gate
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Run Rust unit, compiler, RPZ, DGMail bundle & OpenAPI parity tests
+        run: cargo test --locked -- --nocapture
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build hardened FROM scratch container image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: dgspamguard:ci
+          cache-from: type=gha,scope=dgspamguard-amd64
+          cache-to: type=gha,mode=max,scope=dgspamguard-amd64
+
+      - name: Verify scratch container CLI under UID 10001 & read-only rootfs
+        run: |
+          docker run --rm \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges:true \
+            dgspamguard:ci dgspamguard --version
+          docker run --rm \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges:true \
+            dgspamguard:ci dgspamguard --help >/dev/null
+
+      - name: Verify OpenShift restricted-v2 SCC arbitrary UID (1000670000:0)
+        run: |
+          docker run --rm \
+            --user 1000670000:0 \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --cap-drop=ALL \
+            --security-opt=no-new-privileges:true \
+            dgspamguard:ci dgspamguard --version
+
+      - name: Trivy vulnerability, secret & IaC security gate (CRITICAL/HIGH)
+        run: |
+          mkdir -p /tmp/trivy-scan
+          docker save -o /tmp/trivy-scan/dgspamguard-ci.tar dgspamguard:ci
+          docker run --rm \
+            -v /tmp/trivy-scan:/scan:ro \
+            ghcr.io/aquasecurity/trivy:0.76.1 image \
+            --input /scan/dgspamguard-ci.tar \
+            --scanners vuln,secret,misconfig \
+            --severity CRITICAL,HIGH \
+            --exit-code 1
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/repo:ro" \
+            ghcr.io/aquasecurity/trivy:0.76.1 fs /repo \
+            --scanners vuln,secret,misconfig \
+            --severity CRITICAL,HIGH \
+            --exit-code 1
+
+  helm-and-manifests:
+    name: Lint & Render Helm Chart
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+
+      - name: Run strict Helm chart lint
+        run: helm lint charts/dgspamguard --strict
+
+      - name: Render Kubernetes, OpenShift, and External-DB profiles
+        run: |
+          helm template dgspamguard charts/dgspamguard --namespace dgspamguard > /tmp/k8s-default.yaml
+          helm template dgspamguard charts/dgspamguard --namespace dgspamguard \
+            --set openshift.enabled=true \
+            --set openshift.route.enabled=true \
+            --set openshift.route.host=dgspamguard.daviante.org \
+            --set swagger.enabled=false > /tmp/openshift.yaml
+          helm template dgspamguard charts/dgspamguard --namespace dgspamguard \
+            --set database.internal.enabled=false \
+            --set database.external.existingSecret=external-pg-secret > /tmp/external-db.yaml

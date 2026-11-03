@@ -1,0 +1,168 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/daviante-org/dgspamguard
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+swagger:
+  enabled: true
+
+config:
+  dbPoolMinSize: 2
+  dbPoolMaxSize: 16
+  bootstrapOnStartup: true
+  bootstrapBundleUrl: "https://github.com/daviante-org/dgspamguard-data/releases/latest/download/bundle.tar.gz"
+  syncSchedulerEnabled: true
+  syncIntervalSeconds: 60
+  snapshotIntervalSeconds: 14400
+  retentionDays: 7
+  abusechAuthKey: ""
+  abusechExistingSecret: ""
+  abusechExistingSecretKey: "abusech-auth-key"
+  extraEnv: []
+
+database:
+  internal:
+    enabled: true
+    image:
+      repository: docker.io/library/postgres
+      tag: "18.6-alpine"
+      pullPolicy: IfNotPresent
+    username: dgspamguard
+    database: dgspamguard
+    password: ""
+    existingSecret: ""
+    existingSecretPasswordKey: "postgres-password"
+    persistence:
+      enabled: true
+      storageClassName: ""
+      accessModes:
+        - ReadWriteOnce
+      size: 10Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+
+  external:
+    url: ""
+    existingSecret: ""
+    existingSecretKey: "database-url"
+
+openshift:
+  enabled: false
+  route:
+    enabled: false
+    host: ""
+    path: ""
+    annotations: {}
+    tls:
+      enabled: true
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+
+serviceAccount:
+  create: true
+  automount: false
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 0
+  fsGroup: 0
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+tmpVolume:
+  medium: ""
+  sizeLimit: 1Gi
+
+service:
+  type: ClusterIP
+  port: 8091
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: dgspamguard.daviante.org
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: "1"
+    memory: 768Mi
+
+startupProbe:
+  httpGet:
+    path: /healthz/live
+    port: http
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+
+livenessProbe:
+  httpGet:
+    path: /healthz/live
+    port: http
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /healthz/ready
+    port: http
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 75
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: false
+  allowAllIngress: true
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
