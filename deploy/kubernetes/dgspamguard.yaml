@@ -43,7 +43,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: dgspamguard
-          image: ghcr.io/daviante-org/dgspamguard:1.0.0
+          image: ghcr.io/daviante-org/dgspamguard:1.0.1
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false

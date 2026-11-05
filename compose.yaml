@@ -20,7 +20,7 @@ services:
       retries: 10
 
   dgspamguard:
-    image: ghcr.io/daviante-org/dgspamguard:1.0.0
+    image: ghcr.io/daviante-org/dgspamguard:1.0.1
     build:
       context: .
       dockerfile: Dockerfile

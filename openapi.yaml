@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: DGSPAMGUARD Threat & Mail Intelligence API
-  version: 1.0.0
+  version: 1.0.1
   summary: 5-layer domain, URL, SMTP IP/CIDR, email taxonomy, malware attachment hash, Protective DNS RPZ, and mail rule intelligence API by Daviante.
   description: |
     **DGSPAMGUARD** compiles global open-source CSIRT phishing feeds, malware distribution hosts, disposable and free email provider directories, URL shortener registries, TLD abuse reputation, and attachment SHA-256 IOCs into low-latency REST endpoints and signed rolling dataset snapshots (`dgspamguard-data`).
@@ -387,7 +387,7 @@ components:
           example: dgspamguard
         version:
           type: string
-          example: 1.0.0
+          example: 1.0.1
 
     HealthReadyResponse:
       type: object

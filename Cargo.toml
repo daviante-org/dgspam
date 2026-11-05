@@ -1,6 +1,6 @@
 [package]
 name = "dgspamguard"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 rust-version = "1.82"
 description = "Self-hosted domain, URL, email, file-hash threat intelligence & mail rule compiler engine by Daviante."
