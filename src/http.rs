@@ -9,7 +9,7 @@ use crate::swagger::{
     build_branded_home_html, build_branded_openapi_schema, build_branded_swagger_html,
     resolve_brand_asset, DEFAULT_SWAGGER_TITLE,
 };
-use crate::types::{DgspamguardError, APP_VERSION};
+use crate::types::{ArtifactSource, DgspamguardError, APP_VERSION};
 use axum::body::Body;
 use axum::extract::{ConnectInfo, Path, Request, State};
 use axum::http::header::{
@@ -519,35 +519,42 @@ async fn handle_get_snapshot(
 
 async fn handle_download_bundle(
     State(state): State<AppState>,
+    method: Method,
     Path(version): Path<String>,
     headers: HeaderMap,
 ) -> Response {
-    stream_snapshot_artifact(&state, &version, "bundle.tar.gz", &headers).await
+    stream_snapshot_artifact(&state, method, &version, "bundle.tar.gz", &headers).await
 }
 
 async fn handle_download_file(
     State(state): State<AppState>,
+    method: Method,
     Path((version, filename)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Response {
-    stream_snapshot_artifact(&state, &version, &filename, &headers).await
+    stream_snapshot_artifact(&state, method, &version, &filename, &headers).await
 }
 
 async fn stream_snapshot_artifact(
     state: &AppState,
+    method: Method,
     version: &str,
     filename: &str,
     req_headers: &HeaderMap,
 ) -> Response {
     let inst = Some(format!("/v1/snapshots/{version}/files/{filename}"));
-    let artifact = match state.db.get_cached_artifact(version, filename).await {
-        Ok(a) => a,
+    let meta = match state.db.get_artifact_meta(version, filename).await {
+        Ok(m) => m,
         Err(err) => return map_dgspamguard_error(err, inst),
     };
 
-    let etag_val = format!("\"{}\"", artifact.sha256);
+    let etag_val = format!("\"{}\"", meta.sha256);
     if let Some(inm) = req_headers.get(IF_NONE_MATCH).and_then(|v| v.to_str().ok()) {
-        if inm.trim() == etag_val || inm.trim() == artifact.sha256 {
+        let matched = inm.split(',').any(|item| {
+            let trimmed = item.trim();
+            trimmed == "*" || trimmed == etag_val || trimmed == meta.sha256
+        });
+        if matched {
             let mut not_mod = Response::new(Body::empty());
             *not_mod.status_mut() = StatusCode::NOT_MODIFIED;
             if let Ok(hv) = HeaderValue::from_str(&etag_val) {
@@ -557,29 +564,41 @@ async fn stream_snapshot_artifact(
         }
     }
 
-    let file = match tokio::fs::File::open(&artifact.path).await {
-        Ok(f) => f,
-        Err(e) => return map_dgspamguard_error(DgspamguardError::Io(e), inst),
+    let body = if method == Method::HEAD {
+        Body::empty()
+    } else {
+        let artifact = match state.db.materialize_artifact(&meta).await {
+            Ok(a) => a,
+            Err(err) => return map_dgspamguard_error(err, inst),
+        };
+        match artifact.source {
+            ArtifactSource::CachedFile(path) => match tokio::fs::File::open(&path).await {
+                Ok(file) => Body::from_stream(ReaderStream::new(file)),
+                Err(_) => match state.db.fetch_artifact_bytes(&meta.version, &meta.filename).await {
+                    Ok(bytes) => Body::from(bytes),
+                    Err(err) => return map_dgspamguard_error(err, inst),
+                },
+            },
+            ArtifactSource::InMemory(bytes) => Body::from(bytes),
+        }
     };
 
-    let stream = ReaderStream::new(file);
-    let mut resp = Response::new(Body::from_stream(stream));
+    let mut resp = Response::new(body);
     let h = resp.headers_mut();
-    if let Ok(ct) = HeaderValue::from_str(&artifact.content_type) {
+    if let Ok(ct) = HeaderValue::from_str(&meta.content_type) {
         h.insert(CONTENT_TYPE, ct);
     }
-    if let Ok(cl) = HeaderValue::from_str(&artifact.size_bytes.to_string()) {
+    if let Ok(cl) = HeaderValue::from_str(&meta.size_bytes.to_string()) {
         h.insert(CONTENT_LENGTH, cl);
     }
-    if let Ok(disp) =
-        HeaderValue::from_str(&format!("attachment; filename=\"{}\"", artifact.filename))
+    if let Ok(disp) = HeaderValue::from_str(&format!("attachment; filename=\"{}\"", meta.filename))
     {
         h.insert(CONTENT_DISPOSITION, disp);
     }
     if let Ok(ev) = HeaderValue::from_str(&etag_val) {
         h.insert(ETAG, ev);
     }
-    if let Ok(sha_hv) = HeaderValue::from_str(&artifact.sha256) {
+    if let Ok(sha_hv) = HeaderValue::from_str(&meta.sha256) {
         h.insert(HeaderName::from_static("x-checksum-sha256"), sha_hv);
     }
     let cache_hdr = if version == "latest" {

@@ -16,8 +16,9 @@ use crate::seed_data::{
     extract_seed_memory_sets, DEFAULT_ALLOWED_HOSTS, DEFAULT_BOOTSTRAP_BUNDLE_URL,
 };
 use crate::types::{
-    AllowlistRule, CachedArtifact, CompiledThreatSet, DgspamguardError, DgspamguardResult,
-    FeedSourceSpec, PackagedSnapshot, RuntimeCatalog, TldRiskRule, DATASET_FILENAMES,
+    AllowlistRule, ArtifactSource, CachedArtifact, CompiledThreatSet, DgspamguardError,
+    DgspamguardResult, FeedSourceSpec, PackagedSnapshot, RuntimeCatalog, SnapshotArtifactMeta,
+    TldRiskRule, DATASET_FILENAMES,
 };
 use bytes::Bytes;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
@@ -1468,6 +1469,7 @@ impl Database {
             .map_err(|e| DgspamguardError::Database(e.to_string()))?;
 
         self.refresh_in_memory_meta().await?;
+        self.evict_non_active_cache_dirs(Some(&packaged.version)).await;
         let _ = self.prune_expired_snapshots(retention_days).await;
         Ok(())
     }
@@ -2454,11 +2456,17 @@ impl Database {
         })
     }
 
-    pub async fn get_cached_artifact(
+    /// Purge any cached snapshot directories other than `keep_version` and clean up
+    /// stale `*.tmp` files so bounded `/tmp` tmpfs volumes never accumulate across 4h cuts.
+    pub async fn evict_non_active_cache_dirs(&self, keep_version: Option<&str>) {
+        purge_cache_dir_except(&self.settings.cache_dir, keep_version).await;
+    }
+
+    pub async fn get_artifact_meta(
         &self,
         requested_version: &str,
         filename: &str,
-    ) -> DgspamguardResult<CachedArtifact> {
+    ) -> DgspamguardResult<SnapshotArtifactMeta> {
         let allowed = filename == "bundle.tar.gz"
             || filename == "SHA256SUMS.txt"
             || filename == "manifest.json"
@@ -2478,7 +2486,12 @@ impl Database {
 
         let meta_row = client
             .query_opt(
-                "SELECT content_type, sha256, size_bytes FROM dgspamguard_snapshot_files WHERE version = $1 AND filename = $2",
+                r#"SELECT f.content_type,
+                          f.sha256,
+                          f.size_bytes,
+                          (f.version = COALESCE((SELECT active_version FROM dgspamguard_state WHERE id = 1), '')) AS is_active
+                   FROM dgspamguard_snapshot_files f
+                   WHERE f.version = $1 AND f.filename = $2"#,
                 &[&version, &filename],
             )
             .await
@@ -2492,43 +2505,121 @@ impl Database {
         let content_type: String = meta_row.get(0);
         let sha256: String = meta_row.get(1);
         let size_bytes_i64: i64 = meta_row.get(2);
-        let size_bytes = size_bytes_i64.max(0) as u64;
+        let is_active: bool = meta_row.get(3);
 
-        let dir: PathBuf = self.settings.cache_dir.join(&version);
-        let target_path = dir.join(filename);
-        if let Ok(md) = tokio::fs::metadata(&target_path).await {
-            if md.len() == size_bytes {
-                return Ok(CachedArtifact {
-                    filename: filename.to_string(),
-                    content_type,
-                    sha256,
-                    size_bytes,
-                    path: target_path,
-                });
-            }
-        }
+        Ok(SnapshotArtifactMeta {
+            version,
+            is_active,
+            filename: filename.to_string(),
+            content_type,
+            sha256,
+            size_bytes: size_bytes_i64.max(0) as u64,
+        })
+    }
 
-        tokio::fs::create_dir_all(&dir).await?;
+    pub async fn fetch_artifact_bytes(&self, version: &str, filename: &str) -> DgspamguardResult<Bytes> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| DgspamguardError::Database(e.to_string()))?;
+
         let payload_row = client
-            .query_one(
+            .query_opt(
                 "SELECT payload FROM dgspamguard_snapshot_files WHERE version = $1 AND filename = $2",
                 &[&version, &filename],
             )
             .await
-            .map_err(|e| DgspamguardError::Database(e.to_string()))?;
+            .map_err(|e| DgspamguardError::Database(e.to_string()))?
+            .ok_or_else(|| {
+                DgspamguardError::NotFound(format!(
+                    "Artifact '{filename}' not found on snapshot '{version}'."
+                ))
+            })?;
         let bytes: Vec<u8> = payload_row.get(0);
+        Ok(Bytes::from(bytes))
+    }
 
-        let tmp_path = dir.join(format!(".{filename}.{}.tmp", rand::random::<u32>()));
-        tokio::fs::write(&tmp_path, &bytes).await?;
-        let _ = tokio::fs::rename(&tmp_path, &target_path).await;
+    pub async fn materialize_artifact(
+        &self,
+        meta: &SnapshotArtifactMeta,
+    ) -> DgspamguardResult<CachedArtifact> {
+        if meta.is_active {
+            let dir: PathBuf = self.settings.cache_dir.join(&meta.version);
+            let target_path = dir.join(&meta.filename);
+            if let Ok(md) = tokio::fs::metadata(&target_path).await {
+                if md.len() == meta.size_bytes {
+                    return Ok(CachedArtifact {
+                        version: meta.version.clone(),
+                        filename: meta.filename.clone(),
+                        content_type: meta.content_type.clone(),
+                        sha256: meta.sha256.clone(),
+                        size_bytes: meta.size_bytes,
+                        source: ArtifactSource::CachedFile(target_path),
+                    });
+                }
+            }
 
+            self.evict_non_active_cache_dirs(Some(&meta.version)).await;
+            let bytes = self.fetch_artifact_bytes(&meta.version, &meta.filename).await?;
+
+            if tokio::fs::create_dir_all(&dir).await.is_ok() {
+                let tmp_path = dir.join(format!(".{}.{}.tmp", meta.filename, rand::random::<u32>()));
+                match tokio::fs::write(&tmp_path, &bytes).await {
+                    Ok(()) => {
+                        if tokio::fs::rename(&tmp_path, &target_path).await.is_ok() {
+                            return Ok(CachedArtifact {
+                                version: meta.version.clone(),
+                                filename: meta.filename.clone(),
+                                content_type: meta.content_type.clone(),
+                                sha256: meta.sha256.clone(),
+                                size_bytes: bytes.len() as u64,
+                                source: ArtifactSource::CachedFile(target_path),
+                            });
+                        }
+                        let _ = tokio::fs::remove_file(&tmp_path).await;
+                    }
+                    Err(err) => {
+                        let _ = tokio::fs::remove_file(&tmp_path).await;
+                        tracing::debug!(
+                            version = %meta.version,
+                            filename = %meta.filename,
+                            error = %err,
+                            "Cache write skipped (disk full or read-only); serving artifact directly from memory"
+                        );
+                    }
+                }
+            }
+
+            return Ok(CachedArtifact {
+                version: meta.version.clone(),
+                filename: meta.filename.clone(),
+                content_type: meta.content_type.clone(),
+                sha256: meta.sha256.clone(),
+                size_bytes: bytes.len() as u64,
+                source: ArtifactSource::InMemory(bytes),
+            });
+        }
+
+        // Historical backfill snapshots stream directly from PostgreSQL without touching `/tmp`.
+        let bytes = self.fetch_artifact_bytes(&meta.version, &meta.filename).await?;
         Ok(CachedArtifact {
-            filename: filename.to_string(),
-            content_type,
-            sha256,
+            version: meta.version.clone(),
+            filename: meta.filename.clone(),
+            content_type: meta.content_type.clone(),
+            sha256: meta.sha256.clone(),
             size_bytes: bytes.len() as u64,
-            path: target_path,
+            source: ArtifactSource::InMemory(bytes),
         })
+    }
+
+    pub async fn get_cached_artifact(
+        &self,
+        requested_version: &str,
+        filename: &str,
+    ) -> DgspamguardResult<CachedArtifact> {
+        let meta = self.get_artifact_meta(requested_version, filename).await?;
+        self.materialize_artifact(&meta).await
     }
 
     // =========================================================================
@@ -2738,5 +2829,43 @@ fn write_pg_opt_col(buf: &mut Vec<u8>, opt: Option<&str>) {
     match opt {
         Some(s) => write_pg_text_col(buf, s),
         None => buf.extend_from_slice(b"\\N"),
+    }
+}
+
+/// Remove cached snapshot subdirectories other than `keep_version` and clean up stale `*.tmp` files.
+pub async fn purge_cache_dir_except(cache_dir: &std::path::Path, keep_version: Option<&str>) {
+    let Ok(mut entries) = tokio::fs::read_dir(cache_dir).await else {
+        return;
+    };
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let path = entry.path();
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if name_str.starts_with('.') || name_str.ends_with(".tmp") {
+            let _ = tokio::fs::remove_file(&path).await;
+            continue;
+        }
+        if keep_version != Some(name_str.as_ref()) {
+            if tokio::fs::remove_dir_all(&path).await.is_err() {
+                let _ = tokio::fs::remove_file(&path).await;
+            }
+        } else if let Ok(mut sub) = tokio::fs::read_dir(&path).await {
+            while let Ok(Some(sub_entry)) = sub.next_entry().await {
+                let sub_name = sub_entry.file_name();
+                let sub_str = sub_name.to_string_lossy();
+                if sub_str.starts_with('.') && sub_str.ends_with(".tmp") {
+                    if let Ok(md) = sub_entry.metadata().await {
+                        let stale = md
+                            .modified()
+                            .ok()
+                            .and_then(|m| m.elapsed().ok())
+                            .is_none_or(|age| age.as_secs() > 120);
+                        if stale {
+                            let _ = tokio::fs::remove_file(sub_entry.path()).await;
+                        }
+                    }
+                }
+            }
+        }
     }
 }

@@ -661,3 +661,33 @@ fn test_utc_wall_clock_snapshot_boundary_alignment() {
         Utc.with_ymd_and_hms(2026, 11, 4, 0, 0, 0).unwrap()
     );
 }
+
+#[tokio::test]
+async fn test_cache_dir_eviction_and_orphan_tmp_cleanup() {
+    let base = std::env::temp_dir().join(format!("dgspamguard-cache-test-{}", rand::random::<u64>()));
+    let old_dir = base.join("v20261104.1600");
+    let active_dir = base.join("v20261105.0800");
+    tokio::fs::create_dir_all(&old_dir).await.unwrap();
+    tokio::fs::create_dir_all(&active_dir).await.unwrap();
+
+    tokio::fs::write(old_dir.join("bundle.tar.gz"), b"old-bundle")
+        .await
+        .unwrap();
+    tokio::fs::write(active_dir.join("bundle.tar.gz"), b"active-bundle")
+        .await
+        .unwrap();
+    tokio::fs::write(base.join(".orphan.tmp"), b"leaked-tmp")
+        .await
+        .unwrap();
+
+    dgspamguard::db::purge_cache_dir_except(&base, Some("v20261105.0800")).await;
+
+    assert!(!old_dir.exists(), "Old snapshot cache directory must be evicted");
+    assert!(!base.join(".orphan.tmp").exists(), "Orphan top-level .tmp file must be deleted");
+    assert!(
+        active_dir.join("bundle.tar.gz").exists(),
+        "Active snapshot cached file must remain intact"
+    );
+
+    let _ = tokio::fs::remove_dir_all(&base).await;
+}

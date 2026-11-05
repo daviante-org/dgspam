@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
@@ -172,10 +173,27 @@ pub struct PackagedSnapshot {
 }
 
 #[derive(Debug, Clone)]
-pub struct CachedArtifact {
+pub enum ArtifactSource {
+    CachedFile(PathBuf),
+    InMemory(Bytes),
+}
+
+#[derive(Debug, Clone)]
+pub struct SnapshotArtifactMeta {
+    pub version: String,
+    pub is_active: bool,
     pub filename: String,
     pub content_type: String,
     pub sha256: String,
     pub size_bytes: u64,
-    pub path: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub struct CachedArtifact {
+    pub version: String,
+    pub filename: String,
+    pub content_type: String,
+    pub sha256: String,
+    pub size_bytes: u64,
+    pub source: ArtifactSource,
 }
